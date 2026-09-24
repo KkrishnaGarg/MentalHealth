@@ -1,26 +1,96 @@
 @import "tailwindcss";
 
+/*
+ * Central design tokens ("Calm Academic Minimalism").
+ * Components consume these via utilities (bg-primary, text-muted, ...);
+ * never hard-code hex values in components.
+ */
+@theme {
+  --color-primary: #315a72;
+  --color-primary-hover: #284a5e;
+  --color-primary-tint: #e9f0f4;
+  --color-sage: #6f9b89;
+  --color-sage-tint: #edf4f1;
+  --color-background: #f8faf9;
+  --color-surface: #ffffff;
+  --color-ink: #1f2933;
+  --color-muted: #667085;
+  --color-line: #e3e8e6;
+  --color-line-strong: #c9d2cf;
+  --color-warning: #b7791f;
+  --color-warning-tint: #fbf3e4;
+  --color-danger: #b94a48;
+  --color-danger-tint: #f9eaea;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --spacing-1: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  --shadow-subtle: 0 1px 2px rgb(31 41 51 / 0.05);
+  --shadow-medium: 0 4px 16px rgb(31 41 51 / 0.07);
+
+  --ease-calm: cubic-bezier(0.2, 0, 0, 1);
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --motion-fast: 150ms;
+  --motion-normal: 220ms;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-background);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+/* Visible keyboard focus everywhere. */
+:focus-visible:not([tabindex="-1"]) {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in var(--motion-normal) var(--ease-calm) both;
+}
+
+@keyframes skeleton {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-skeleton {
+  animation: skeleton 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
