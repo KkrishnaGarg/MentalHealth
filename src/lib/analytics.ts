@@ -7,9 +7,9 @@ export type ResearchRow = {
   survey_version: number;
   year: number;
   branch: string;
-  pss_score: number;
-  helplessness_score: number;
-  self_efficacy_score: number;
+  pss_score: number | null;
+  helplessness_score: number | null;
+  self_efficacy_score: number | null;
   total_time_s: number | null;
   submitted_at: string;
   residence: string | null;
@@ -33,6 +33,11 @@ export const SUBSCALES = [
   { key: "helplessness_score", label: "Perceived helplessness" },
   { key: "self_efficacy_score", label: "Lack of self-efficacy" },
 ] as const;
+
+/** Non-null numeric values of a score column (a version may have no scored items). */
+export function scores(rows: ResearchRow[], key: "pss_score" | "helplessness_score" | "self_efficacy_score"): number[] {
+  return rows.map((r) => r[key]).filter((x): x is number => typeof x === "number");
+}
 
 // ---- A. Sample overview -----------------------------------------------------
 

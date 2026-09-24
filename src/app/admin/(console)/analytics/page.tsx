@@ -4,6 +4,7 @@ import { Badge, ChartCard, EmptyState, StatCard } from "@/components/ui/Display"
 import { ASSOCIATION_NOTE, BANDS_DISCLAIMER, YEARS } from "@/lib/constants";
 import {
   bandCounts,
+  scores,
   countBy,
   describe,
   factorDistributions,
@@ -13,6 +14,8 @@ import {
 import { fetchResearchRows, fmt } from "@/lib/adminData";
 import { requireAdmin } from "@/lib/auth";
 import { mean } from "@/lib/stats";
+import { resolveVersion } from "@/lib/versions";
+import { VersionTabs } from "@/components/admin/VersionTabs";
 
 export const metadata = { title: "Analytics" };
 
@@ -21,22 +24,25 @@ function fmtP(p: number | null) {
   return p < 0.001 ? "< .001" : p.toFixed(3);
 }
 
-export default async function AnalyticsPage() {
+export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ v?: string }> }) {
+  const { v } = await searchParams;
   const { supabase } = await requireAdmin();
-  const rows = await fetchResearchRows(supabase);
+  const { versions, selected } = await resolveVersion(supabase, v);
+  const rows = await fetchResearchRows(supabase, selected?.version);
 
   if (rows.length === 0) {
     return (
       <>
         <AdminHeader title="Analytics" />
+        <VersionTabs versions={versions} selected={selected} basePath="/admin/analytics" />
         <EmptyState title="No data to analyse yet">Analyses appear once responses have been collected.</EmptyState>
       </>
     );
   }
 
-  const pss = describe(rows.map((r) => r.pss_score));
-  const help = describe(rows.map((r) => r.helplessness_score));
-  const eff = describe(rows.map((r) => r.self_efficacy_score));
+  const pss = describe(scores(rows, "pss_score"));
+  const help = describe(scores(rows, "helplessness_score"));
+  const eff = describe(scores(rows, "self_efficacy_score"));
   const factors = factorDistributions(rows);
   const corr = predefinedCorrelations(rows);
 
@@ -49,26 +55,29 @@ export default async function AnalyticsPage() {
   const { data: openEnded } = await supabase
     .from("open_ended_responses")
     .select("respondent_id, submitted_at, question_key, question_text, response_text")
+    .eq("survey_version", selected?.version ?? -1)
     .order("submitted_at", { ascending: false })
     .limit(60);
 
   const byBranch = countBy(rows, (r) => r.branch).map((b) => ({
     name: b.name,
     n: b.count,
-    mean: mean(rows.filter((r) => r.branch === b.name).map((r) => r.pss_score)),
+    mean: mean(scores(rows.filter((r) => r.branch === b.name), "pss_score")),
   }));
   const byYear = countBy(rows, (r) => r.year).map((y) => ({
     name: YEARS.find((v) => String(v.value) === y.name)?.label ?? y.name,
     n: y.count,
-    mean: mean(rows.filter((r) => String(r.year) === y.name).map((r) => r.pss_score)),
+    mean: mean(scores(rows.filter((r) => String(r.year) === y.name), "pss_score")),
   }));
 
   return (
     <>
       <AdminHeader
         title="Analytics"
-        description="Follows the predefined analysis plan. Results describe associations in a cross-sectional, self-selected, single-institute sample; they do not establish causation."
+        description="Each survey version is analysed separately. Follows the predefined analysis plan. Results describe associations in a cross-sectional, self-selected, single-institute sample; they do not establish causation."
       />
+
+      <VersionTabs versions={versions} selected={selected} basePath="/admin/analytics" />
 
       <Section title="A. Sample overview">
         <div className="grid gap-4 sm:grid-cols-3">
@@ -91,15 +100,15 @@ export default async function AnalyticsPage() {
           <StatCard label="Mean" value={fmt(pss.mean, 2)} />
           <StatCard label="Median" value={fmt(pss.median, 1)} />
           <StatCard label="Standard deviation" value={fmt(pss.sd, 2)} />
-          <StatCard label="Range observed" value={`${pss.min}–${pss.max}`} hint="possible 0–40" />
+          <StatCard label="Range observed" value={`${pss.min}–${pss.max}`} hint="0–40 for the standard PSS-10" />
         </div>
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <ChartCard title="Distribution of total PSS-10 score" description="The continuous score is the primary stress variable.">
-            <CountChart data={histogram(rows.map((r) => r.pss_score), 0, 40, 5)} />
+            <CountChart data={histogram(scores(rows, "pss_score"), 0, 40, 5)} />
           </ChartCard>
           <ChartCard title="Conventional interpretive bands (secondary, descriptive)" note={BANDS_DISCLAIMER}>
             <CountChart
-              data={bandCounts(rows.map((r) => r.pss_score)).map((b) => ({ name: b.label.replace(" perceived stress", ""), count: b.count }))}
+              data={bandCounts(scores(rows, "pss_score")).map((b) => ({ name: b.label.replace(" perceived stress", ""), count: b.count }))}
               color="sage"
             />
           </ChartCard>
@@ -108,17 +117,17 @@ export default async function AnalyticsPage() {
 
       <Section title="C. PSS subscales">
         <div className="grid gap-4 lg:grid-cols-2">
-          <ChartCard title="Perceived helplessness (items 1, 2, 3, 6, 9, 10; range 0–24)">
+          <ChartCard title="Perceived helplessness (scored items tagged helplessness)">
             <p className="mb-3 text-[15px] text-muted">
               Mean {fmt(help.mean, 2)} · median {fmt(help.median, 1)} · SD {fmt(help.sd, 2)}
             </p>
-            <CountChart data={histogram(rows.map((r) => r.helplessness_score), 0, 24, 3)} />
+            <CountChart data={histogram(scores(rows, "helplessness_score"), 0, 24, 3)} />
           </ChartCard>
-          <ChartCard title="Lack of self-efficacy (items 4, 5, 7, 8 reverse-scored; range 0–16)">
+          <ChartCard title="Lack of self-efficacy (scored items tagged self-efficacy, reverse-scored where set)">
             <p className="mb-3 text-[15px] text-muted">
               Mean {fmt(eff.mean, 2)} · median {fmt(eff.median, 1)} · SD {fmt(eff.sd, 2)}
             </p>
-            <CountChart data={histogram(rows.map((r) => r.self_efficacy_score), 0, 16, 2)} color="sage" />
+            <CountChart data={histogram(scores(rows, "self_efficacy_score"), 0, 16, 2)} color="sage" />
           </ChartCard>
         </div>
       </Section>

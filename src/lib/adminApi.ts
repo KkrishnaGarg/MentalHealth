@@ -4,12 +4,11 @@ import { NextResponse } from "next/server";
 /** Maps database guard/RPC errors to safe, user-facing API errors. */
 export function dbError(error: { message: string; code?: string }) {
   const known: Record<string, [number, string]> = {
-    version_locked: [409, "This survey version is published or closed and can no longer be edited. Create a new version instead."],
-    locked_instrument: [409, "The PSS-10 core instrument is locked and cannot be changed."],
+    version_locked: [409, "Published and closed versions are frozen so their responses stay comparable. Start a new draft version to make changes."],
     draft_exists: [409, "A draft version already exists. Publish or finish it first."],
     not_a_draft: [409, "Only a draft version can be published."],
     not_published: [409, "Only a published version can be closed."],
-    pss10_incomplete: [409, "A version needs all 10 PSS-10 items before it can be published."],
+    no_questions: [409, "Add at least one active question before publishing."],
     invalid_version: [404, "Survey version not found."],
     invalid_reorder: [422, "Those questions cannot be reordered."],
     forbidden: [403, "Not authorised."],

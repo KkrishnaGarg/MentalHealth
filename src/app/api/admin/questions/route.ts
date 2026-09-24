@@ -1,55 +1,37 @@
-import { randomBytes } from "node:crypto";
+﻿import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { dbError, forbidden, invalid } from "@/lib/adminApi";
 import { getAdmin } from "@/lib/auth";
-import { questionCreateSchema } from "@/lib/validation";
+import { questionSpecSchema, specToRow } from "@/lib/questionSpec";
 
-const STRESSOR_SCALE = [
-  { value: 1, label: "Very low contribution" },
-  { value: 2, label: "Low" },
-  { value: 3, label: "Moderate" },
-  { value: 4, label: "High" },
-  { value: 5, label: "Very high contribution" },
-];
+const createSchema = z.object({ survey_version_id: z.uuid(), question: questionSpecSchema });
 
-/** Create a custom question. Only possible in a draft version (enforced by DB trigger). */
+/** Create a question of any type in any category. Only possible in a draft version (enforced by DB trigger). */
 export async function POST(request: Request) {
   const admin = await getAdmin();
   if (!admin) return forbidden();
-  const parsed = questionCreateSchema.safeParse(await request.json().catch(() => null));
+  const parsed = createSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return invalid();
-  const q = parsed.data;
-
-  const type = q.section === "stressors" ? "likert" : q.section === "open_ended" ? "text" : "single";
-  const options = q.section === "stressors" ? STRESSOR_SCALE : q.section === "demographics" ? q.options : undefined;
-  if (type === "single" && (!options || options.length < 2)) return invalid();
+  const { survey_version_id, question } = parsed.data;
 
   const { data: last } = await admin.supabase
     .from("questions")
     .select("position")
-    .eq("survey_version_id", q.survey_version_id)
+    .eq("survey_version_id", survey_version_id)
     .order("position", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  const key = `custom_${q.section}_${randomBytes(3).toString("hex")}`;
+  const key = `q_${question.section}_${randomBytes(3).toString("hex")}`;
   const { data, error } = await admin.supabase
     .from("questions")
-    .insert({
-      survey_version_id: q.survey_version_id,
-      key,
-      section: q.section,
-      type,
-      text: q.text,
-      options: options ?? null,
-      required: q.section === "open_ended" || q.section === "demographics" ? false : q.required,
-      position: (last?.position ?? 0) + 1,
-    })
+    .insert({ survey_version_id, key, position: (last?.position ?? 0) + 1, ...specToRow(question) })
     .select("id")
     .single();
   if (error) return dbError(error);
 
-  await audit(admin.supabase, admin.user.id, "QUESTION_CREATED", "question", data.id, { section: q.section, key });
+  await audit(admin.supabase, admin.user.id, "QUESTION_CREATED", "question", data.id, { section: question.section, type: question.type });
   return NextResponse.json({ ok: true, id: data.id });
 }

@@ -11,7 +11,7 @@ export type RespondentRow = {
   year: number;
   branch: string;
   submitted_at: string;
-  pss_score: number;
+  pss_score: number | null;
   total_time_s: number | null;
   flags: FlagType[];
 };
@@ -44,7 +44,7 @@ export function RespondentTable({ rows }: { rows: RespondentRow[] }) {
               <td className="px-4 py-2">{r.year}</td>
               <td className="px-4 py-2">{r.branch}</td>
               <td className="whitespace-nowrap px-4 py-2">{new Date(r.submitted_at).toLocaleDateString()}</td>
-              <td className="px-4 py-2 tabular-nums">{r.pss_score}</td>
+              <td className="px-4 py-2 tabular-nums">{r.pss_score ?? "—"}</td>
               <td className="whitespace-nowrap px-4 py-2">{fmtDuration(r.total_time_s)}</td>
               <td className="px-4 py-2">
                 <div className="flex flex-wrap gap-1">

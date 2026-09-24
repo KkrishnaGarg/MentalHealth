@@ -3,12 +3,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ResearchRow } from "./analytics";
 
 /** All rows of the admin-only research view (RLS applies via the admin's session). */
-export async function fetchResearchRows(supabase: SupabaseClient): Promise<ResearchRow[]> {
-  const { data, error } = await supabase
-    .from("research_dataset")
-    .select("*")
-    .order("submitted_at", { ascending: false })
-    .range(0, 9999);
+export async function fetchResearchRows(supabase: SupabaseClient, version?: number | null): Promise<ResearchRow[]> {
+  let query = supabase.from("research_dataset").select("*").order("submitted_at", { ascending: false }).range(0, 9999);
+  if (version) query = query.eq("survey_version", version);
+  const { data, error } = await query;
   if (error) throw new Error("Could not load research data");
   return (data ?? []) as ResearchRow[];
 }

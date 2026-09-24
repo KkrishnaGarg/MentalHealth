@@ -4,19 +4,19 @@ import { CountChart } from "@/components/admin/AnalyticsChart";
 import { LiveRefresh } from "@/components/admin/LiveRefresh";
 import { Badge, ChartCard, EmptyState, StatCard } from "@/components/ui/Display";
 import { BANDS_DISCLAIMER, YEARS } from "@/lib/constants";
-import { bandCounts, completionTime, countBy, describe, FLAG_LABELS, histogram, qualityFlags, type FlagType } from "@/lib/analytics";
+import { bandCounts, scores, completionTime, countBy, describe, FLAG_LABELS, histogram, qualityFlags, type FlagType } from "@/lib/analytics";
 import { fetchDuplicateEmails, fetchResearchRows, fmt, fmtDuration } from "@/lib/adminData";
 import { requireAdmin } from "@/lib/auth";
+import { resolveVersion } from "@/lib/versions";
+import { VersionTabs } from "@/components/admin/VersionTabs";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ v?: string }> }) {
+  const { v } = await searchParams;
   const { supabase } = await requireAdmin();
-  const [rows, dupEmails, { data: published }] = await Promise.all([
-    fetchResearchRows(supabase),
-    fetchDuplicateEmails(supabase),
-    supabase.from("survey_versions").select("version").eq("status", "published").maybeSingle(),
-  ]);
+  const { versions, selected } = await resolveVersion(supabase, v);
+  const [rows, dupEmails] = await Promise.all([fetchResearchRows(supabase, selected?.version), fetchDuplicateEmails(supabase)]);
 
-  const pss = describe(rows.map((r) => r.pss_score));
+  const pss = describe(scores(rows, "pss_score"));
   const time = completionTime(rows);
   const yearData = countBy(rows, (r) => YEARS.find((y) => y.value === r.year)?.label ?? r.year);
   const branchData = countBy(rows, (r) => r.branch);
@@ -33,11 +33,13 @@ export default async function DashboardPage() {
         actions={<LiveRefresh />}
       />
 
+      <VersionTabs versions={versions} selected={selected} basePath="/admin" />
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Total responses" value={rows.length} />
         <StatCard label="Mean PSS-10 score" value={fmt(pss.mean)} hint={pss.sd !== null ? `SD ${fmt(pss.sd)} · continuous 0–40 score` : "continuous 0–40 score"} />
         <StatCard label="Median completion time" value={fmtDuration(time.median)} />
-        <StatCard label="Current survey" value={published ? `Version ${published.version}` : "None published"} />
+        <StatCard label="Showing survey" value={selected ? `Version ${selected.version}` : "None"} hint={selected?.status} />
       </div>
 
       {rows.length === 0 ? (
@@ -57,9 +59,9 @@ export default async function DashboardPage() {
 
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             <ChartCard title="PSS-10 score distribution" description="Continuous total score (0–40) is the primary stress variable.">
-              <CountChart data={histogram(rows.map((r) => r.pss_score), 0, 40, 5)} />
+              <CountChart data={histogram(scores(rows, "pss_score"), 0, 40, 5)} />
               <ul className="mt-3 space-y-1 text-sm text-muted">
-                {bandCounts(rows.map((r) => r.pss_score)).map((b) => (
+                {bandCounts(scores(rows, "pss_score")).map((b) => (
                   <li key={b.key} className="flex justify-between">
                     <span>{b.label}</span>
                     <span className="tabular-nums">
@@ -84,7 +86,7 @@ export default async function DashboardPage() {
                   ))}
                 </ul>
               )}
-              <Link href="/admin/respondents?flagged=1" prefetch={false} className="mt-4 inline-block text-sm text-primary underline underline-offset-2">
+              <Link href={`/admin/respondents?flagged=1${selected ? `&v=${selected.version}` : ""}`} prefetch={false} className="mt-4 inline-block text-sm text-primary underline underline-offset-2">
                 Review flagged responses
               </Link>
             </ChartCard>
@@ -112,7 +114,7 @@ export default async function DashboardPage() {
                       <td className="py-2 pr-4">{new Date(r.submitted_at).toLocaleString()}</td>
                       <td className="py-2 pr-4">{r.year}</td>
                       <td className="py-2 pr-4">{r.branch}</td>
-                      <td className="py-2 pr-4 tabular-nums">{r.pss_score}</td>
+                      <td className="py-2 pr-4 tabular-nums">{r.pss_score ?? "—"}</td>
                       <td className="py-2 pr-4">{fmtDuration(r.total_time_s)}</td>
                       <td className="py-2">
                         <Link href={`/admin/respondents/${r.respondent_id}`} prefetch={false} className="text-primary underline underline-offset-2">

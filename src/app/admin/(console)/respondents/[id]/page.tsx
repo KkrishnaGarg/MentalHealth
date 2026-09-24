@@ -59,7 +59,9 @@ export default async function RespondentDetailPage({ params }: { params: Promise
   const version = (response?.survey_versions as unknown as { version: number } | null)?.version;
 
   const label = (a: A) => {
-    const opt = a.questions!.options?.find((o) => o.value === a.value);
+    const opts = a.questions!.options;
+    if (Array.isArray(a.value)) return a.value.map((x) => opts?.find((o) => o.value === x)?.label ?? String(x)).join(", ");
+    const opt = opts?.find((o) => o.value === a.value);
     return opt ? `${a.value} — ${opt.label}` : String(a.value);
   };
 

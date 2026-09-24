@@ -7,6 +7,8 @@ import { qualityFlags } from "@/lib/analytics";
 import { fetchDuplicateEmails, fetchResearchRows } from "@/lib/adminData";
 import { requireAdmin } from "@/lib/auth";
 import { BRANCHES, YEARS } from "@/lib/constants";
+import { resolveVersion } from "@/lib/versions";
+import { VersionTabs } from "@/components/admin/VersionTabs";
 
 export const metadata = { title: "Respondents" };
 
@@ -25,10 +27,11 @@ export default async function RespondentsPage({ searchParams }: { searchParams: 
   const page = Math.max(1, Number(first(sp.page)) || 1);
 
   const { supabase } = await requireAdmin();
+  const { versions, selected } = await resolveVersion(supabase, sp.v);
 
   let query = supabase
     .from("admin_dataset")
-    .select("respondent_id, name, roll_no, email, year, branch, submitted_at, pss_score, total_time_s")
+    .select("respondent_id, name, roll_no, email, year, branch, submitted_at, pss_score, total_time_s, survey_version")
     .order("submitted_at", { ascending: false })
     .range(0, 9999);
   if (q) {
@@ -36,11 +39,12 @@ export default async function RespondentsPage({ searchParams }: { searchParams: 
     const safe = q.replace(/[%*,()\\]/g, " ").trim();
     if (safe) query = query.or(`name.ilike.%${safe}%,roll_no.ilike.%${safe}%,email.ilike.%${safe}%`);
   }
+  if (selected) query = query.eq("survey_version", selected.version);
   if (year) query = query.eq("year", year);
   if (branch) query = query.eq("branch", branch);
   if (/^\d{4}-\d{2}-\d{2}$/.test(from)) query = query.gte("submitted_at", from);
 
-  const [{ data: people }, research, dup] = await Promise.all([query, fetchResearchRows(supabase), fetchDuplicateEmails(supabase)]);
+  const [{ data: people }, research, dup] = await Promise.all([query, fetchResearchRows(supabase, selected?.version), fetchDuplicateEmails(supabase)]);
   const researchById = new Map(research.map((r) => [r.respondent_id, r]));
 
   let rows: RespondentRow[] = (people ?? []).map((p) => {
@@ -60,6 +64,7 @@ export default async function RespondentsPage({ searchParams }: { searchParams: 
     if (branch) p.set("branch", branch);
     if (from) p.set("from", from);
     if (flaggedOnly) p.set("flagged", "1");
+    if (selected) p.set("v", String(selected.version));
     for (const [k, v] of Object.entries(over)) p.set(k, v);
     return `/admin/respondents?${p.toString()}`;
   };
@@ -72,6 +77,8 @@ export default async function RespondentsPage({ searchParams }: { searchParams: 
         title="Respondents"
         description="Identifying information. Restricted to administrators; opening a response is recorded in the audit log."
       />
+
+      <VersionTabs versions={versions} selected={selected} basePath="/admin/respondents" />
 
       <form method="get" className="mb-5 flex flex-wrap items-end gap-3 rounded-lg border border-line bg-surface p-4">
         <label className="flex flex-col gap-1 text-sm text-muted">
@@ -106,6 +113,7 @@ export default async function RespondentsPage({ searchParams }: { searchParams: 
           <input type="checkbox" name="flagged" value="1" defaultChecked={flaggedOnly} className="size-4 accent-primary" />
           Flagged only
         </label>
+        {selected && <input type="hidden" name="v" value={selected.version} />}
         <Button type="submit">Apply filters</Button>
         <Link href="/admin/respondents" className="min-h-11 self-center text-sm text-primary underline underline-offset-2">
           Reset

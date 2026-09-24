@@ -1,11 +1,7 @@
 import { YEARS } from "@/lib/constants";
-import type { AnswerMap, Details, Question } from "@/lib/types";
+import { isAnswered, type AnswerMap, type Details, type Question } from "@/lib/types";
 
 export type ReviewSection = { label: string; questions: Question[] };
-
-function isAnswered(v: unknown) {
-  return v !== undefined && v !== null && !(typeof v === "string" && v.trim() === "");
-}
 
 /**
  * Completion status only. Deliberately shows no scores, bands or totals:

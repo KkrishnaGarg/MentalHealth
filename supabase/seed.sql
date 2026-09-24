@@ -1,14 +1,10 @@
 -- Seed: survey version 1 (published for initial testing).
 -- Idempotent: does nothing if version 1 already exists.
--- Run in the Supabase SQL editor (as postgres) after 001_schema.sql.
+-- Run in the Supabase SQL editor (as postgres) after 001_schema.sql and 002_flexible_questions.sql.
 --
--- PSS-10 wording: Cohen, Kamarck & Mermelstein (1983). DO NOT EDIT — the
--- rows are marked locked and the database refuses changes to them.
---
--- The 7 stressor items and the open-ended items are project-authored and
--- should be finalised with the research team and piloted (10-15 peers)
--- BEFORE version 1 collects real data; after that, change them only by
--- creating version 2.
+-- PSS-10 wording: Cohen, Kamarck & Mermelstein (1983).
+-- Every question is editable, but only in a DRAFT version: edit, then publish it as a new version.
+-- Published versions are frozen so each version's responses stay interpretable.
 
 do $$
 declare
@@ -19,12 +15,7 @@ declare
     {"value":2,"label":"Sometimes"},
     {"value":3,"label":"Fairly often"},
     {"value":4,"label":"Very often"}]';
-  scale_opts jsonb := '[
-    {"value":1,"label":"Very low contribution"},
-    {"value":2,"label":"Low"},
-    {"value":3,"label":"Moderate"},
-    {"value":4,"label":"High"},
-    {"value":5,"label":"Very high contribution"}]';
+  scale_cfg jsonb := '{"min":1,"max":5,"min_label":"Very low contribution","max_label":"Very high contribution"}';
 begin
   if exists (select 1 from public.survey_versions where version = 1) then
     raise notice 'Survey version 1 already exists; skipping seed.';
@@ -33,32 +24,32 @@ begin
 
   insert into public.survey_versions (version, status) values (1, 'draft') returning id into v_id;
 
-  -- PSS-10 (locked core instrument). Items 4, 5, 7, 8 are reverse-scored.
+  -- PSS-10 (validated instrument). Items 4, 5, 7, 8 are reverse-scored.
   insert into public.questions
-    (survey_version_id, key, section, type, text, options, reverse_scored, subscale, required, locked, position)
+    (survey_version_id, key, section, type, text, options, reverse_scored, subscale, required, position)
   values
-    (v_id, 'pss_1',  'pss10', 'likert', 'In the last month, how often have you been upset because of something that happened unexpectedly?', pss_opts, false, 'helplessness', true, true, 1),
-    (v_id, 'pss_2',  'pss10', 'likert', 'In the last month, how often have you felt that you were unable to control the important things in your life?', pss_opts, false, 'helplessness', true, true, 2),
-    (v_id, 'pss_3',  'pss10', 'likert', 'In the last month, how often have you felt nervous and "stressed"?', pss_opts, false, 'helplessness', true, true, 3),
-    (v_id, 'pss_4',  'pss10', 'likert', 'In the last month, how often have you felt confident about your ability to handle your personal problems?', pss_opts, true, 'self_efficacy', true, true, 4),
-    (v_id, 'pss_5',  'pss10', 'likert', 'In the last month, how often have you felt that things were going your way?', pss_opts, true, 'self_efficacy', true, true, 5),
-    (v_id, 'pss_6',  'pss10', 'likert', 'In the last month, how often have you found that you could not cope with all the things that you had to do?', pss_opts, false, 'helplessness', true, true, 6),
-    (v_id, 'pss_7',  'pss10', 'likert', 'In the last month, how often have you been able to control irritations in your life?', pss_opts, true, 'self_efficacy', true, true, 7),
-    (v_id, 'pss_8',  'pss10', 'likert', 'In the last month, how often have you felt that you were on top of things?', pss_opts, true, 'self_efficacy', true, true, 8),
-    (v_id, 'pss_9',  'pss10', 'likert', 'In the last month, how often have you been angered because of things that were outside of your control?', pss_opts, false, 'helplessness', true, true, 9),
-    (v_id, 'pss_10', 'pss10', 'likert', 'In the last month, how often have you felt difficulties were piling up so high that you could not overcome them?', pss_opts, false, 'helplessness', true, true, 10);
+    (v_id, 'pss_1',  'pss10', 'likert', 'In the last month, how often have you been upset because of something that happened unexpectedly?', pss_opts, false, 'helplessness', true, 1),
+    (v_id, 'pss_2',  'pss10', 'likert', 'In the last month, how often have you felt that you were unable to control the important things in your life?', pss_opts, false, 'helplessness', true, 2),
+    (v_id, 'pss_3',  'pss10', 'likert', 'In the last month, how often have you felt nervous and "stressed"?', pss_opts, false, 'helplessness', true, 3),
+    (v_id, 'pss_4',  'pss10', 'likert', 'In the last month, how often have you felt confident about your ability to handle your personal problems?', pss_opts, true, 'self_efficacy', true, 4),
+    (v_id, 'pss_5',  'pss10', 'likert', 'In the last month, how often have you felt that things were going your way?', pss_opts, true, 'self_efficacy', true, 5),
+    (v_id, 'pss_6',  'pss10', 'likert', 'In the last month, how often have you found that you could not cope with all the things that you had to do?', pss_opts, false, 'helplessness', true, 6),
+    (v_id, 'pss_7',  'pss10', 'likert', 'In the last month, how often have you been able to control irritations in your life?', pss_opts, true, 'self_efficacy', true, 7),
+    (v_id, 'pss_8',  'pss10', 'likert', 'In the last month, how often have you felt that you were on top of things?', pss_opts, true, 'self_efficacy', true, 8),
+    (v_id, 'pss_9',  'pss10', 'likert', 'In the last month, how often have you been angered because of things that were outside of your control?', pss_opts, false, 'helplessness', true, 9),
+    (v_id, 'pss_10', 'pss10', 'likert', 'In the last month, how often have you felt difficulties were piling up so high that you could not overcome them?', pss_opts, false, 'helplessness', true, 10);
 
   -- Seven stressor factors, each 1-5, kept separate from the PSS score.
   insert into public.questions
-    (survey_version_id, key, section, type, text, options, required, position)
+    (survey_version_id, key, section, type, text, config, required, position)
   values
-    (v_id, 'stressor_workload',  'stressors', 'likert', 'How much does your academic workload contribute to the stress you experience?', scale_opts, true, 11),
-    (v_id, 'stressor_exams',     'stressors', 'likert', 'How much do examinations contribute to the stress you experience?', scale_opts, true, 12),
-    (v_id, 'stressor_cgpa',      'stressors', 'likert', 'How much do your CGPA and career prospects contribute to the stress you experience?', scale_opts, true, 13),
-    (v_id, 'stressor_finance',   'stressors', 'likert', 'How much does your family''s financial condition contribute to the stress you experience?', scale_opts, true, 14),
-    (v_id, 'stressor_placement', 'stressors', 'likert', 'How much does placement pressure contribute to the stress you experience?', scale_opts, true, 15),
-    (v_id, 'stressor_sleep',     'stressors', 'likert', 'How much does your sleep (amount or quality) contribute to the stress you experience?', scale_opts, true, 16),
-    (v_id, 'stressor_personal',  'stressors', 'likert', 'How much does your personal life contribute to the stress you experience?', scale_opts, true, 17);
+    (v_id, 'stressor_workload',  'stressors', 'scale', 'How much does your academic workload contribute to the stress you experience?', scale_cfg, true, 11),
+    (v_id, 'stressor_exams',     'stressors', 'scale', 'How much do examinations contribute to the stress you experience?', scale_cfg, true, 12),
+    (v_id, 'stressor_cgpa',      'stressors', 'scale', 'How much do your CGPA and career prospects contribute to the stress you experience?', scale_cfg, true, 13),
+    (v_id, 'stressor_finance',   'stressors', 'scale', 'How much does your family''s financial condition contribute to the stress you experience?', scale_cfg, true, 14),
+    (v_id, 'stressor_placement', 'stressors', 'scale', 'How much does placement pressure contribute to the stress you experience?', scale_cfg, true, 15),
+    (v_id, 'stressor_sleep',     'stressors', 'scale', 'How much does your sleep (amount or quality) contribute to the stress you experience?', scale_cfg, true, 16),
+    (v_id, 'stressor_personal',  'stressors', 'scale', 'How much does your personal life contribute to the stress you experience?', scale_cfg, true, 17);
 
   -- Open-ended (optional, admin-only raw text).
   insert into public.questions

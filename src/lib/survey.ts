@@ -18,7 +18,7 @@ export async function getPublishedSurvey() {
 
   const { data: questions } = await supabase
     .from("questions")
-    .select("id, key, section, type, text, options, required, position")
+    .select("id, key, section, type, text, options, config, required, position")
     .eq("survey_version_id", version.id)
     .eq("active", true)
     .order("position");

@@ -1,7 +1,22 @@
 export type QuestionOption = { value: string | number; label: string };
 
-export type QuestionType = "likert" | "single" | "text" | "number";
+/**
+ * single  = choose one (also used for True/False)
+ * multi   = choose any number (checkboxes)
+ * likert  = choose one labelled point, numeric values (used by PSS-10)
+ * scale   = pick a number on a custom range with end labels
+ * number  = type a number (optional min/max)
+ * text    = free text
+ */
+export type QuestionType = "single" | "multi" | "likert" | "scale" | "number" | "text";
 export type QuestionSection = "pss10" | "stressors" | "open_ended" | "demographics";
+
+export type QuestionConfig = {
+  min?: number;
+  max?: number;
+  min_label?: string;
+  max_label?: string;
+};
 
 /** Question as shown to respondents (public columns only). */
 export type Question = {
@@ -11,6 +26,7 @@ export type Question = {
   type: QuestionType;
   text: string;
   options: QuestionOption[] | null;
+  config: QuestionConfig | null;
   required: boolean;
   position: number;
 };
@@ -20,7 +36,6 @@ export type AdminQuestion = Question & {
   survey_version_id: string;
   reverse_scored: boolean;
   subscale: "helplessness" | "self_efficacy" | null;
-  locked: boolean;
   active: boolean;
 };
 
@@ -33,7 +48,7 @@ export type SurveyVersion = {
   closed_at: string | null;
 };
 
-export type AnswerValue = string | number | null;
+export type AnswerValue = string | number | Array<string | number> | null;
 export type AnswerMap = Record<string, AnswerValue>;
 
 export type Details = {
@@ -43,3 +58,20 @@ export type Details = {
   year: number | null;
   branch: string;
 };
+
+export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
+  single: "Multiple choice (pick one)",
+  multi: "Checkboxes (pick several)",
+  likert: "Labelled scale (e.g. Never … Very often)",
+  scale: "Number scale (custom range)",
+  number: "Number entry",
+  text: "Text answer",
+};
+
+/** Whether a stored answer counts as "answered". */
+export function isAnswered(v: unknown): boolean {
+  if (v === undefined || v === null) return false;
+  if (typeof v === "string") return v.trim() !== "";
+  if (Array.isArray(v)) return v.length > 0;
+  return true;
+}

@@ -29,7 +29,7 @@ export const submitSchema = z.object({
     .array(
       z.object({
         question_id: uuid,
-        value: z.union([z.string().max(2000), z.number().finite(), z.null()]),
+        value: z.union([z.string().max(2000), z.number().finite(), z.array(z.union([z.string().max(60), z.number().finite()])).max(20), z.null()]),
       }),
     )
     .max(100),
@@ -39,29 +39,6 @@ export const submitSchema = z.object({
 });
 
 export type SubmitPayload = z.infer<typeof submitSchema>;
-
-export const questionCreateSchema = z.object({
-  survey_version_id: uuid,
-  section: z.enum(["stressors", "open_ended", "demographics"]),
-  text: text(1000),
-  required: z.boolean().default(true),
-  options: z
-    .array(z.object({ value: z.union([z.string(), z.number()]), label: text(200) }))
-    .min(2)
-    .max(12)
-    .optional(),
-});
-
-export const questionUpdateSchema = z.object({
-  text: text(1000).optional(),
-  required: z.boolean().optional(),
-  active: z.boolean().optional(),
-  options: z
-    .array(z.object({ value: z.union([z.string(), z.number()]), label: text(200) }))
-    .min(2)
-    .max(12)
-    .optional(),
-});
 
 export const reorderSchema = z.object({
   survey_version_id: uuid,

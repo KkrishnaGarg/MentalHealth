@@ -54,21 +54,20 @@ export async function GET(request: NextRequest) {
   if (!type || !(type in EXPORTS)) return NextResponse.json({ error: "invalid" }, { status: 400 });
   const spec = EXPORTS[type];
 
-  const { data, error } = await admin.supabase
-    .from(spec.view)
-    .select(spec.columns.join(","))
-    .order(spec.order, { ascending: true })
-    .range(0, 49999);
+  const versionParam = Number(request.nextUrl.searchParams.get("v")) || null;
+  let query = admin.supabase.from(spec.view).select(spec.columns.join(",")).order(spec.order, { ascending: true }).range(0, 49999);
+  if (versionParam) query = query.eq("survey_version", versionParam);
+  const { data, error } = await query;
   if (error) return NextResponse.json({ error: "server" }, { status: 500 });
 
   const rows = (data ?? []) as unknown as Array<Record<string, unknown>>;
-  await audit(admin.supabase, admin.user.id, "CSV_EXPORTED", "export", null, { type, rows: rows.length });
+  await audit(admin.supabase, admin.user.id, "CSV_EXPORTED", "export", null, { type, version: versionParam, rows: rows.length });
 
   const stamp = new Date().toISOString().slice(0, 10);
   return new NextResponse(toCsv(rows, [...spec.columns]), {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${spec.file}_${stamp}.csv"`,
+      "Content-Disposition": `attachment; filename="${spec.file}${versionParam ? `_v${versionParam}` : "_all_versions"}_${stamp}.csv"`,
       "Cache-Control": "no-store",
     },
   });

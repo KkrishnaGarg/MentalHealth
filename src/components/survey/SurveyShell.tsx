@@ -7,7 +7,7 @@ import { Spinner } from "@/components/ui/Display";
 import { Modal } from "@/components/ui/Modal";
 import { flow } from "@/lib/flowState";
 import { useMounted } from "@/lib/useMounted";
-import type { AnswerMap, AnswerValue, Details, Question, QuestionSection } from "@/lib/types";
+import { isAnswered, type AnswerMap, type AnswerValue, type Details, type Question, type QuestionSection } from "@/lib/types";
 import { QuestionCard } from "./QuestionCard";
 import { ReviewSummary } from "./ReviewSummary";
 import { SurveyNavigation } from "./SurveyNavigation";
@@ -34,14 +34,14 @@ const STEP_DEFS: Step[] = [
     id: "stressors",
     label: "Academic Stressors",
     title: "Sources of academic pressure",
-    intro: "For each area, choose how much it contributes to the stress you experience. 1 is a very low contribution and 5 is a very high contribution.",
+    intro: "Please answer each question below.",
     sections: ["stressors"],
   },
   {
     id: "perspective",
     label: "Your Perspective",
     title: "Your perspective",
-    intro: "These questions are optional. Share only what you are comfortable sharing.",
+    intro: "Share only what you are comfortable sharing. Questions marked (optional) can be skipped.",
     sections: ["open_ended", "demographics"],
   },
 ];
@@ -116,8 +116,7 @@ function SurveyRunner({ versionId, questions }: Props) {
 
   function missingRequired(s: Step) {
     return stepQuestions(s).filter((q) => {
-      const v = answers[q.id];
-      return q.required && (v === undefined || v === null || (typeof v === "string" && v.trim() === ""));
+      return q.required && !isAnswered(answers[q.id]);
     });
   }
 
@@ -232,7 +231,7 @@ function SurveyRunner({ versionId, questions }: Props) {
               <QuestionCard
                 key={q.id}
                 question={q}
-                number={q.section === "pss10" || q.section === "stressors" ? i + 1 : undefined}
+                number={i + 1}
                 value={answers[q.id]}
                 onChange={(v) => setAnswer(q.id, v)}
                 error={errorIds.has(q.id)}

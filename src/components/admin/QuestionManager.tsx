@@ -6,26 +6,23 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Display";
 import { Toast, type ToastState } from "@/components/ui/Toast";
 import type { AdminQuestion, QuestionSection, SurveyVersion } from "@/lib/types";
-import { NewQuestionForm, QuestionEditor } from "./QuestionEditor";
+import { NewQuestionForm, QuestionEditor, SECTION_LABELS } from "./QuestionEditor";
 
-const TABS: Array<{ id: QuestionSection; label: string }> = [
-  { id: "pss10", label: "PSS-10" },
-  { id: "stressors", label: "Stressors" },
-  { id: "open_ended", label: "Open-ended" },
-  { id: "demographics", label: "Demographics" },
-];
-
+const TABS: QuestionSection[] = ["pss10", "stressors", "open_ended", "demographics"];
+const TAB_LABEL: Record<QuestionSection, string> = { pss10: "PSS-10", stressors: "Stressors", open_ended: "Open-ended", demographics: "Demographics" };
 const STATUS_TONE = { draft: "draft", published: "published", closed: "closed" } as const;
 
-type Props = { versions: SurveyVersion[]; selectedId: string; questions: AdminQuestion[] };
+type Props = { versions: SurveyVersion[]; selectedId: string; questions: AdminQuestion[]; responseCounts: Record<string, number> };
 
-export function QuestionManager({ versions, selectedId, questions }: Props) {
+export function QuestionManager({ versions, selectedId, questions, responseCounts }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<QuestionSection>("pss10");
   const [toast, setToast] = useState<ToastState>(null);
+  const [busy, setBusy] = useState(false);
   const selected = versions.find((v) => v.id === selectedId)!;
+  const draft = versions.find((v) => v.status === "draft") ?? null;
   const editable = selected.status === "draft";
-  const hasDraft = versions.some((v) => v.status === "draft");
+  const nextNumber = Math.max(...versions.map((v) => v.version)) + 1;
 
   async function call(url: string, method: string, body?: unknown) {
     try {
@@ -34,7 +31,7 @@ export function QuestionManager({ versions, selectedId, questions }: Props) {
         headers: body ? { "Content-Type": "application/json" } : undefined,
         body: body ? JSON.stringify(body) : undefined,
       });
-      const data = (await res.json().catch(() => ({}))) as { message?: string; id?: string };
+      const data = (await res.json().catch(() => ({}))) as { message?: string };
       if (!res.ok) {
         setToast({ tone: "error", message: data.message ?? "That change could not be saved." });
         return false;
@@ -48,15 +45,19 @@ export function QuestionManager({ versions, selectedId, questions }: Props) {
     }
   }
 
-  async function cloneVersion() {
+  async function versionAction(action: "clone" | "publish" | "close" | "discard", id: string, then?: (newId?: string) => void) {
+    setBusy(true);
     const res = await fetch("/api/admin/versions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "clone", id: selected.id }),
-    });
-    const data = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
-    if (res.ok && data.id) router.push(`/admin/questions?v=${data.id}`);
-    else setToast({ tone: "error", message: data.message ?? "Could not create a new version." });
+      body: JSON.stringify({ action, id }),
+    }).catch(() => null);
+    const data = (await res?.json().catch(() => ({}))) as { id?: string; message?: string } | undefined;
+    setBusy(false);
+    if (res?.ok) {
+      then?.(data?.id);
+      router.refresh();
+    } else setToast({ tone: "error", message: data?.message ?? "That action failed. Please try again." });
   }
 
   function move(list: AdminQuestion[], index: number, dir: -1 | 1) {
@@ -67,7 +68,7 @@ export function QuestionManager({ versions, selectedId, questions }: Props) {
   }
 
   const inTab = questions.filter((q) => q.section === tab).sort((a, b) => a.position - b.position);
-  const movable = inTab.filter((q) => !q.locked);
+  const n = responseCounts[selected.id] ?? 0;
 
   return (
     <div className="space-y-6">
@@ -76,99 +77,111 @@ export function QuestionManager({ versions, selectedId, questions }: Props) {
           <button
             key={v.id}
             type="button"
-            onClick={() => router.push(`/admin/questions?v=${v.id}`)}
+            onClick={() => router.push(`/admin/questions?v=${v.version}`)}
             aria-current={v.id === selectedId ? "true" : undefined}
             className={`flex min-h-11 items-center gap-2 rounded-md border px-3 py-2 text-[15px] ${v.id === selectedId ? "border-primary bg-primary-tint" : "border-line-strong bg-surface hover:border-primary"}`}
           >
             Version {v.version} <Badge tone={STATUS_TONE[v.status]}>{v.status}</Badge>
+            <span className="text-sm text-muted">· {responseCounts[v.id] ?? 0} responses</span>
           </button>
         ))}
-        {!hasDraft && (
-          <Button variant="secondary" onClick={cloneVersion}>
-            Create new version from Version {selected.version}
-          </Button>
-        )}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface p-4">
         {editable ? (
-          <p className="text-[15px]">
-            <strong>Draft</strong> — custom questions can be edited. The PSS-10 stays locked. Once published, this version can no longer be edited.
+          <p className="max-w-2xl text-[15px]">
+            <strong>Draft — Version {selected.version}.</strong> Add, edit, retype, reorder or delete any question. Nothing you change here affects respondents until you
+            publish. Publishing makes this the live survey; new responses are stored under Version {selected.version}, separate from earlier versions.
           </p>
         ) : (
-          <p className="text-[15px]">
-            🔒 <strong>{selected.status === "published" ? "Published" : "Closed"}</strong> — editing disabled. To change the instrument, create a new version.
+          <p className="max-w-2xl text-[15px]">
+            🔒 <strong>Version {selected.version} is {selected.status}</strong> and has {n} response{n === 1 ? "" : "s"}. It is frozen so its responses stay
+            comparable. To change any question, start a new draft version.
           </p>
         )}
-        {editable && (
-          <Button
-            onClick={() => {
-              if (window.confirm(`Publish Version ${selected.version}? The current published version will be closed and this one will start collecting responses. It cannot be edited afterwards.`))
-                void call("/api/admin/versions", "POST", { action: "publish", id: selected.id });
-            }}
-          >
-            Publish Version {selected.version}
-          </Button>
-        )}
-        {selected.status === "published" && (
-          <Button
-            variant="secondary"
-            onClick={() => {
-              if (window.confirm("Close this version? The survey will stop accepting responses until another version is published."))
-                void call("/api/admin/versions", "POST", { action: "close", id: selected.id });
-            }}
-          >
-            Close data collection
-          </Button>
-        )}
+
+        <div className="flex flex-wrap gap-2">
+          {editable && (
+            <>
+              <Button
+                disabled={busy}
+                onClick={() => {
+                  if (window.confirm(`Publish Version ${selected.version}? It becomes the live survey and the current published version is closed. It can't be edited afterwards.`))
+                    void versionAction("publish", selected.id);
+                }}
+              >
+                Publish Version {selected.version}
+              </Button>
+              <Button
+                variant="secondary"
+                disabled={busy}
+                onClick={() => {
+                  if (window.confirm(`Discard the draft Version ${selected.version}? Your unpublished edits will be lost. Published versions are not affected.`))
+                    void versionAction("discard", selected.id, () => router.push("/admin/questions"));
+                }}
+              >
+                Discard draft
+              </Button>
+            </>
+          )}
+          {!editable && !draft && (
+            <Button disabled={busy} onClick={() => void versionAction("clone", selected.id, (id) => id && router.push(`/admin/questions`))}>
+              Edit questions → new draft (Version {nextNumber})
+            </Button>
+          )}
+          {!editable && draft && (
+            <Button onClick={() => router.push(`/admin/questions?v=${draft.version}`)}>Continue editing draft (Version {draft.version})</Button>
+          )}
+          {selected.status === "published" && (
+            <Button
+              variant="secondary"
+              disabled={busy}
+              onClick={() => {
+                if (window.confirm("Close this version? The survey stops accepting responses until a version is published."))
+                  void versionAction("close", selected.id);
+              }}
+            >
+              Close data collection
+            </Button>
+          )}
+        </div>
       </div>
 
-      <div role="tablist" aria-label="Question sections" className="flex flex-wrap gap-1 border-b border-line">
+      <div role="tablist" aria-label="Question categories" className="flex flex-wrap gap-1 border-b border-line">
         {TABS.map((t) => (
           <button
-            key={t.id}
+            key={t}
             role="tab"
             type="button"
-            aria-selected={tab === t.id}
-            onClick={() => setTab(t.id)}
-            className={`min-h-11 rounded-t-md px-4 py-2 text-[15px] ${tab === t.id ? "border-b-2 border-primary font-medium text-primary" : "text-muted hover:text-ink"}`}
+            aria-selected={tab === t}
+            onClick={() => setTab(t)}
+            className={`min-h-11 rounded-t-md px-4 py-2 text-[15px] ${tab === t ? "border-b-2 border-primary font-medium text-primary" : "text-muted hover:text-ink"}`}
           >
-            {t.label} ({questions.filter((q) => q.section === t.id).length})
+            {TAB_LABEL[t]} ({questions.filter((q) => q.section === t).length})
           </button>
         ))}
       </div>
-
-      {tab === "pss10" && (
-        <div className="rounded-lg border border-primary/30 bg-primary-tint p-5">
-          <p className="font-semibold text-primary">🔒 Locked core instrument</p>
-          <p className="mt-1 text-[15px]">
-            PSS-10 — standardized questionnaire (Cohen, Kamarck &amp; Mermelstein, 1983). Wording, scoring and order are fixed. Editing is disabled.
-          </p>
-        </div>
-      )}
+      <p className="-mt-3 text-sm text-muted">{SECTION_LABELS[tab]}</p>
 
       {inTab.length === 0 ? (
-        <p className="text-muted">No questions in this section.</p>
+        <p className="text-muted">No questions in this category.</p>
       ) : (
         <ol className="space-y-3">
-          {inTab.map((q) => {
-            const mi = movable.findIndex((m) => m.id === q.id);
-            return (
-              <QuestionEditor
-                key={q.id}
-                question={q}
-                editable={editable}
-                isFirst={mi <= 0}
-                isLast={mi === movable.length - 1}
-                call={call}
-                onMove={(dir) => move(movable, mi, dir)}
-              />
-            );
-          })}
+          {inTab.map((q, i) => (
+            <QuestionEditor
+              key={q.id + q.text + q.type}
+              question={q}
+              editable={editable}
+              isFirst={i === 0}
+              isLast={i === inTab.length - 1}
+              call={call}
+              onMove={(dir) => move(inTab, i, dir)}
+            />
+          ))}
         </ol>
       )}
 
-      {editable && tab !== "pss10" && <NewQuestionForm versionId={selected.id} call={call} />}
+      {editable && <NewQuestionForm versionId={selected.id} section={tab} call={call} />}
 
       <Toast toast={toast} onDismiss={() => setToast(null)} />
     </div>

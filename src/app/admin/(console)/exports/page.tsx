@@ -1,7 +1,9 @@
 import { AdminHeader } from "@/components/admin/AdminHeader";
+import { VersionTabs } from "@/components/admin/VersionTabs";
 import { LinkButton } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Display";
 import { requireAdmin } from "@/lib/auth";
+import { resolveVersion } from "@/lib/versions";
 
 export const metadata = { title: "Exports" };
 
@@ -11,14 +13,14 @@ const EXPORTS = [
     title: "Research dataset",
     label: "Export research dataset",
     identifying: false,
-    text: "One row per respondent: random respondent ID, survey version, year, branch, PSS-10 total and subscale scores, the ten raw PSS item values, the seven stressor ratings, and optional demographics. No name, roll number or email.",
+    text: "One row per respondent: random respondent ID, survey version, year, branch, PSS scores, the ten raw PSS item values, the seven stressor ratings, and optional demographics. No name, roll number or email.",
   },
   {
     type: "research_long",
     title: "Research answers (long format)",
     label: "Export research answers",
     identifying: false,
-    text: "One row per answer, keyed by question (includes any custom questions added in later versions). Open-ended text and identity fields are excluded.",
+    text: "One row per answer, keyed by question. Includes every question you add, of any type (multiple choice, checkboxes, scales, numbers). Open-ended text and identity fields are excluded. Use this for versions with custom questions.",
   },
   {
     type: "open_ended",
@@ -36,11 +38,30 @@ const EXPORTS = [
   },
 ];
 
-export default async function ExportsPage() {
-  await requireAdmin();
+export default async function ExportsPage({ searchParams }: { searchParams: Promise<{ v?: string; all?: string }> }) {
+  const { v, all } = await searchParams;
+  const { supabase } = await requireAdmin();
+  const { versions, selected } = await resolveVersion(supabase, v);
+  const allVersions = all === "1";
+  const vq = allVersions || !selected ? "" : `&v=${selected.version}`;
+
   return (
     <>
-      <AdminHeader title="Exports" description="Every export is recorded in the audit log." />
+      <AdminHeader
+        title="Exports"
+        description="Choose the survey version to export. Different versions can contain different questions, so they are exported separately by default. Every export is recorded in the audit log."
+      />
+      <VersionTabs versions={versions} selected={allVersions ? null : selected} basePath="/admin/exports" />
+      <p className="-mt-2 mb-5 text-sm text-muted">
+        {allVersions ? (
+          <>Exporting <strong>all versions combined</strong>. </>
+        ) : (
+          <>Exporting <strong>Version {selected?.version}</strong> only. </>
+        )}
+        <a href={allVersions ? `/admin/exports${selected ? `?v=${selected.version}` : ""}` : "/admin/exports?all=1"} className="text-primary underline underline-offset-2">
+          {allVersions ? "Export one version instead" : "Export all versions combined"}
+        </a>
+      </p>
       <div className="grid gap-4 lg:grid-cols-2">
         {EXPORTS.map((e) => (
           <section key={e.type} className={`rounded-lg border p-5 shadow-subtle ${e.identifying ? "border-warning/40 bg-warning-tint" : "border-line bg-surface"}`}>
@@ -49,7 +70,7 @@ export default async function ExportsPage() {
               {e.identifying ? <Badge tone="draft">Contains identifying information</Badge> : <Badge tone="published">No identity fields</Badge>}
             </div>
             <p className="mb-4 text-[15px] text-muted">{e.text}</p>
-            <LinkButton href={`/api/admin/export?type=${e.type}`} external variant={e.identifying ? "secondary" : "primary"}>
+            <LinkButton href={`/api/admin/export?type=${e.type}${vq}`} external variant={e.identifying ? "secondary" : "primary"}>
               {e.label}
             </LinkButton>
           </section>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
-import type { Question } from "@/lib/types";
+import { answerMatchesQuestion } from "@/lib/questionSpec";
+import { isAnswered, type Question } from "@/lib/types";
 import { submitSchema } from "@/lib/validation";
 
 export const runtime = "nodejs";
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
 
   const { data: rows, error: qErr } = await supabase
     .from("questions")
-    .select("id, key, section, type, text, options, required, position")
+    .select("id, key, section, type, text, options, config, required, position")
     .eq("survey_version_id", version.id)
     .eq("active", true);
   if (qErr || !rows) return fail(500, "server");
@@ -58,22 +59,13 @@ export async function POST(request: Request) {
     const q = questions.get(a.question_id);
     if (!q || seen.has(a.question_id)) return fail(422, "invalid");
     seen.add(a.question_id);
-    if (a.value === null) continue;
-    if (q.type === "likert" || q.type === "single") {
-      if (!q.options?.some((o) => o.value === a.value)) return fail(422, "invalid");
-    } else if (q.type === "text") {
-      if (typeof a.value !== "string") return fail(422, "invalid");
-    } else if (q.type === "number") {
-      if (typeof a.value !== "number") return fail(422, "invalid");
-    }
+    if (isAnswered(a.value) && !answerMatchesQuestion(q, a.value)) return fail(422, "invalid");
   }
   for (const q of questions.values()) {
     if (!q.required) continue;
     const a = payload.answers.find((x) => x.question_id === q.id);
-    const empty = !a || a.value === null || (typeof a.value === "string" && a.value.trim() === "");
-    if (empty) return fail(422, "invalid");
+    if (!a || !isAnswered(a.value)) return fail(422, "invalid");
   }
-
   const rpcPayload = { ...payload, website: undefined };
   const { error } = await supabase.rpc("submit_survey", { payload: rpcPayload });
 

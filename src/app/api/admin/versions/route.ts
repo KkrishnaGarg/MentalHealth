@@ -4,7 +4,7 @@ import { audit, type AuditAction } from "@/lib/audit";
 import { dbError, forbidden, invalid } from "@/lib/adminApi";
 import { getAdmin } from "@/lib/auth";
 
-const schema = z.object({ action: z.enum(["clone", "publish", "close"]), id: z.uuid() });
+const schema = z.object({ action: z.enum(["clone", "publish", "close", "discard"]), id: z.uuid() });
 
 export async function POST(request: Request) {
   const admin = await getAdmin();
@@ -19,6 +19,13 @@ export async function POST(request: Request) {
     if (error) return dbError(error);
     await audit(supabase, user.id, "VERSION_CLONED", "survey_version", data as string, { source: id });
     return NextResponse.json({ ok: true, id: data });
+  }
+
+  if (action === "discard") {
+    const { error } = await supabase.rpc("discard_draft_version", { version_id: id });
+    if (error) return dbError(error);
+    await audit(supabase, user.id, "VERSION_DISCARDED", "survey_version", id);
+    return NextResponse.json({ ok: true });
   }
 
   const rpc = action === "publish" ? "publish_survey_version" : "close_survey_version";
